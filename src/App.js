@@ -1,23 +1,60 @@
 import React, { useState } from 'react';
-import { Music, Upload, Loader2, Search, AlertCircle } from 'lucide-react';
+import { Music, Upload, Loader2, Search, AlertCircle, Repeat, TrendingUp, Target, Brain } from 'lucide-react';
 
 const SheetMusicAnalyzer = () => {
   const [image, setImage] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [sequence, setSequence] = useState([]);
-  const [rhythm, setRhythm] = useState([]);
-  const [patterns, setPatterns] = useState([]);
+  const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState('');
 
-  const noteMap = {
-    '1': 'Do', '1#': 'Do#', '1b': 'Dob',
-    '2': 'Re', '2#': 'Re#', '2b': 'Reb',
-    '3': 'Mi', '3#': 'Mi#', '3b': 'Mib',
-    '4': 'Fa', '4#': 'Fa#', '4b': 'Fab',
-    '5': 'Sol', '5#': 'Sol#', '5b': 'Solb',
-    '6': 'La', '6#': 'La#', '6b': 'Lab',
-    '7': 'Si', '7#': 'Si#', '7b': 'Sib'
-  };
+  // Sistema RAG: Template almacenado
+  const getAnalysisPrompt = () => `Eres un profesor de música experto. Analiza esta partitura enfocándote en PATRONES MELÓDICOS.
+
+Responde SOLO con JSON válido (sin markdown, sin backticks):
+
+{
+  "informacion_basica": {
+    "tonalidad": "tonalidad completa (ej: Sol menor con Bb y Eb)",
+    "compas": "tipo de compás",
+    "tempo": "indicación de tempo",
+    "clave": "clave usada",
+    "total_compases": número
+  },
+  "patrones_melodicos": [
+    {
+      "nombre": "nombre descriptivo (ej: 'Escala descendente')",
+      "notas_aproximadas": "descripción de notas (ej: 'G-F#-G-A-Bb')",
+      "compases": "dónde aparece (ej: '1-2, 7-8')",
+      "repeticiones": "cuántas veces",
+      "tipo": "escala/arpegio/secuencia/motivo rítmico/cromatismo/salto",
+      "importancia": "por qué es importante",
+      "como_practicar": "consejo específico"
+    }
+  ],
+  "nivel_dificultad": {
+    "general": "principiante/intermedio/avanzado/experto",
+    "razones": ["razones específicas"]
+  },
+  "caracteristicas_tecnicas": {
+    "alteraciones_armadura": ["alteraciones en la armadura"],
+    "alteraciones_accidentales": ["alteraciones accidentales"],
+    "figuras_predominantes": ["figuras más usadas"],
+    "tecnicas_requeridas": ["técnicas necesarias"]
+  },
+  "fragmentos_criticos": [
+    {
+      "compases": "rango",
+      "descripcion": "qué lo hace difícil",
+      "como_practicar": "método específico"
+    }
+  ],
+  "consejos_practica": ["consejo 1", "consejo 2"],
+  "contexto_musical": {
+    "compositor": "compositor",
+    "periodo": "período",
+    "estilo": "características"
+  }
+}`;
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -26,9 +63,7 @@ const SheetMusicAnalyzer = () => {
       reader.onload = (event) => {
         setImage(event.target.result);
         setError('');
-        setSequence([]);
-        setPatterns([]);
-        setRhythm([]);
+        setAnalysis(null);
       };
       reader.readAsDataURL(file);
     }
@@ -49,285 +84,149 @@ const SheetMusicAnalyzer = () => {
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 2500,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: mediaType,
-                    data: base64Image
-                  }
-                },
-                {
-                  type: 'text',
-                  text: `Analiza esta partitura musical y extrae la información en formato JSON.
-
-IMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, sin backticks.
-
-SISTEMA DE NOTACIÓN:
-- Notas naturales: 1=Do/C, 2=Re/D, 3=Mi/E, 4=Fa/F, 5=Sol/G, 6=La/A, 7=Si/B
-- Sostenidos: agrega "#" después del número (ejemplo: "1#" para Do#, "4#" para Fa#)
-- Bemoles: agrega "b" después del número (ejemplo: "7b" para Sib, "3b" para Mib)
-
-El JSON debe tener esta estructura exacta:
-{
-  "notas": [array de strings con números 1-7 y sus alteraciones, ejemplo: ["1", "1#", "2", "3b", "4", "5", "5#", "6", "7b"]],
-  "figuras": [array de strings: "redonda", "blanca", "negra", "corchea", "semicorchea", "fusa"],
-  "compases": número total de compases,
-  "clave": "clave detectada (sol, fa, do)"
-}
-
-INSTRUCCIONES DETALLADAS:
-1. Lee las notas de izquierda a derecha, compás por compás
-2. Identifica la armadura de clave (sostenidos o bemoles al inicio)
-3. Detecta TODOS los sostenidos (#) y bemoles (♭) individuales en las notas
-4. Las alteraciones afectan solo a esa nota específica en ese compás
-5. Una nota sin alteración visible es una nota natural (1-7 sin sufijo)
-
-Ejemplo de respuesta válida:
-{"notas": ["5", "5", "5", "3", "5", "5", "5", "3"], "figuras": ["corchea", "corchea", "corchea", "corchea", "negra", "negra", "blanca", "blanca"], "compases": 2, "clave": "sol"}
-
-Si no puedes leer la partitura claramente, responde con:
-{"error": "No se pudo leer la partitura claramente"}
-
-Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
-                }
-              ]
-            }
-          ]
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: base64Image }
+              },
+              { type: 'text', text: getAnalysisPrompt() }
+            ]
+          }]
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
       const data = await response.json();
-      const text = data.content
-        .filter(item => item.type === 'text')
-        .map(item => item.text)
-        .join('')
-        .trim();
-      
+      const text = data.content.filter(i => i.type === 'text').map(i => i.text).join('').trim();
       const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      
-      const result = JSON.parse(cleanText);
-
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-
-      setSequence(result.notas || []);
-      setRhythm(result.figuras || []);
-      findPatterns(result.notas || []);
+      setAnalysis(JSON.parse(cleanText));
       
     } catch (err) {
-      console.error('Error completo:', err);
-      setError('Error al analizar la partitura. Verifica que la imagen sea clara y contenga notación musical estándar.');
+      console.error('Error:', err);
+      setError('Error al analizar la partitura. Intenta con una imagen más clara.');
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const findPatterns = (seq) => {
-    if (seq.length < 3) {
-      setPatterns([]);
-      return;
-    }
+  // Componentes pequeños reutilizables
+  const InfoCard = ({ label, value, color = 'indigo' }) => (
+    <div className="bg-white p-4 rounded-lg shadow-sm">
+      <div className="text-sm text-gray-600 mb-1">{label}</div>
+      <div className={`text-lg font-bold text-${color}-600`}>{value}</div>
+    </div>
+  );
 
-    const allPatterns = [];
-    const maxPatternLength = Math.min(Math.floor(seq.length / 2), 12);
-
-    // Encontrar todos los patrones
-    for (let len = 3; len <= maxPatternLength; len++) {
-      for (let start = 0; start <= seq.length - len; start++) {
-        const pattern = seq.slice(start, start + len);
-        const occurrences = [];
-        
-        for (let i = 0; i <= seq.length - len; i++) {
-          const candidate = seq.slice(i, i + len);
-          if (pattern.every((note, idx) => note === candidate[idx])) {
-            occurrences.push(i);
-          }
-        }
-
-        if (occurrences.length >= 2) {
-          const patternKey = pattern.join('-');
-          const exists = allPatterns.some(p => p.pattern.join('-') === patternKey);
-          if (!exists) {
-            allPatterns.push({ 
-              pattern, 
-              occurrences, 
-              count: occurrences.length, 
-              length: len 
-            });
-          }
-        }
-      }
-    }
-
-    // Filtrar patrones: eliminar los que están completamente contenidos en otros más largos
-    const filteredPatterns = allPatterns.filter(patternA => {
-      return !allPatterns.some(patternB => {
-        if (patternB.length <= patternA.length) return false;
-        
-        // Verificar si patternA está contenido en patternB
-        const patternAStr = patternA.pattern.join('-');
-        const patternBStr = patternB.pattern.join('-');
-        
-        if (patternBStr.includes(patternAStr)) {
-          // Verificar si las ocurrencias de A están cubiertas por B
-          return patternA.occurrences.every(occA => {
-            return patternB.occurrences.some(occB => {
-              return occA >= occB && occA + patternA.length <= occB + patternB.length;
-            });
-          });
-        }
-        return false;
-      });
-    });
-
-    // Ordenar: primero por longitud (más largo = más importante), luego por repeticiones
-    setPatterns(filteredPatterns.sort((a, b) => {
-      if (b.length !== a.length) return b.length - a.length;
-      return b.count - a.count;
-    }));
-  };
-
-  const getColorForPattern = (index) => {
-    const colors = [
-      'bg-blue-200 border-blue-500',
-      'bg-green-200 border-green-500',
-      'bg-yellow-200 border-yellow-500',
-      'bg-purple-200 border-purple-500',
-      'bg-pink-200 border-pink-500',
-      'bg-orange-200 border-orange-500',
-      'bg-cyan-200 border-cyan-500',
-      'bg-red-200 border-red-500'
-    ];
-    return colors[index % colors.length];
-  };
-
-  const renderNote = (note) => {
-    const noteName = noteMap[note] || note;
-    const hasAlteration = note.includes('#') || note.includes('b');
+  const PatternCard = ({ patron, index }) => {
+    const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'cyan', 'red', 'indigo'];
+    const color = colors[index % colors.length];
+    const icons = {
+      'escala': '📊', 'arpegio': '🎼', 'secuencia': '🔁',
+      'motivo rítmico': '🥁', 'cromatismo': '🌈', 'salto': '⬆️'
+    };
     
     return (
-      <div className="flex flex-col items-center">
-        <span className="font-bold text-xl">{noteName}</span>
-        {hasAlteration && (
-          <span className="text-xs text-indigo-600 font-bold">
-            {note.includes('#') ? '♯' : '♭'}
-          </span>
-        )}
+      <div className={`p-6 rounded-xl border-2 border-${color}-500 bg-${color}-50 shadow-lg`}>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-3xl">{icons[patron.tipo?.toLowerCase()] || '🎵'}</span>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">{patron.nombre}</h3>
+                <span className="inline-block bg-white px-3 py-1 rounded-full text-xs font-semibold text-gray-600 mt-1">
+                  {patron.tipo}
+                </span>
+              </div>
+            </div>
+            <div className="bg-white p-4 rounded-lg mb-3 shadow-sm">
+              <p className="text-sm text-gray-600 mb-1">Patrón de notas:</p>
+              <p className="text-lg font-mono font-bold text-indigo-700">{patron.notas_aproximadas}</p>
+            </div>
+          </div>
+          <div className="ml-4 text-center bg-white px-5 py-3 rounded-lg shadow-md">
+            <div className="text-3xl font-bold text-purple-600">{patron.repeticiones}x</div>
+            <div className="text-xs text-gray-600">veces</div>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <p className="text-sm font-semibold text-gray-700 mb-2">📍 Compases:</p>
+            <p className="text-indigo-700 font-bold">{patron.compases}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <p className="text-sm font-semibold text-gray-700 mb-2">⭐ Importancia:</p>
+            <p className="text-gray-700 text-sm">{patron.importancia}</p>
+          </div>
+        </div>
+        <div className="mt-3 bg-green-100 border-l-4 border-green-500 p-4 rounded-lg">
+          <p className="text-sm font-semibold text-green-900 mb-1">💡 Cómo practicar:</p>
+          <p className="text-green-800 text-sm">{patron.como_practicar}</p>
+        </div>
       </div>
     );
   };
 
-  const renderSequence = () => {
-    if (sequence.length === 0) return null;
-
-    const highlighted = sequence.map((note, idx) => ({
-      note,
-      rhythm: rhythm[idx] || null,
-      patterns: []
-    }));
-
-    patterns.forEach((pattern, patternIdx) => {
-      pattern.occurrences.forEach(start => {
-        for (let i = 0; i < pattern.length; i++) {
-          if (start + i < highlighted.length) {
-            highlighted[start + i].patterns.push(patternIdx);
-          }
-        }
-      });
-    });
-
-    return (
-      <div className="flex flex-wrap gap-2">
-        {highlighted.map((item, idx) => {
-          const hasPattern = item.patterns.length > 0;
-          const color = hasPattern ? getColorForPattern(item.patterns[0]) : 'bg-white border-gray-300';
-          const hasAlteration = item.note.includes('#') || item.note.includes('b');
-          
-          return (
-            <div key={idx} className={`p-3 rounded-lg border-2 ${color} text-center min-w-[70px] shadow-sm transition-all hover:scale-105 ${hasAlteration ? 'ring-2 ring-indigo-300' : ''}`}>
-              {renderNote(item.note)}
-              <div className="text-sm text-gray-600 mt-1">{item.note}</div>
-              {item.rhythm && (
-                <div className="text-xs text-gray-700 mt-1 capitalize">{item.rhythm}</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
+  const getDifficultyColor = (level) => {
+    const colors = {
+      'principiante': 'bg-green-100 text-green-800 border-green-300',
+      'intermedio': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+      'avanzado': 'bg-orange-100 text-orange-800 border-orange-300',
+      'experto': 'bg-red-100 text-red-800 border-red-300'
+    };
+    return colors[level?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-300';
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gradient-to-br from-indigo-50 to-purple-50 min-h-screen">
+    <div className="max-w-7xl mx-auto p-6 bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen">
       <div className="bg-white rounded-2xl shadow-xl p-8">
-        <div className="flex items-center gap-3 mb-8">
-          <Music className="w-12 h-12 text-indigo-600" />
+        <div className="flex items-center gap-4 mb-6">
+          <Music className="w-14 h-14 text-indigo-600" />
           <div>
-            <h1 className="text-4xl font-bold text-gray-800">Analizador de Partituras</h1>
-            <p className="text-gray-600 mt-1">Sube una partitura y detecta patrones automáticamente con IA</p>
-            <p className="text-sm text-indigo-600 mt-1">✨ Ahora con soporte para sostenidos (#) y bemoles (♭)</p>
+            <h1 className="text-4xl font-bold text-gray-800">Análisis de Patrones Musicales</h1>
+            <p className="text-gray-600 mt-1">Sistema RAG optimizado - Análisis inteligente</p>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-l-4 border-indigo-500 p-5 mb-6 rounded-lg">
+          <h3 className="font-bold text-indigo-900 mb-3 text-lg">🎯 Beneficios del análisis</h3>
+          <div className="grid md:grid-cols-2 gap-3 text-sm text-indigo-800">
+            <div className="bg-white p-3 rounded-lg">🔍 <strong>Patrones:</strong> Memoriza más rápido</div>
+            <div className="bg-white p-3 rounded-lg">📈 <strong>Dificultad:</strong> Evalúa tu nivel</div>
+            <div className="bg-white p-3 rounded-lg">⚠️ <strong>Críticos:</strong> Identifica desafíos</div>
+            <div className="bg-white p-3 rounded-lg">💡 <strong>Consejos:</strong> Practica mejor</div>
           </div>
         </div>
 
         <div className="space-y-6">
           <div className="border-4 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-              id="file-upload"
-            />
+            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="file-upload" />
             <label htmlFor="file-upload" className="cursor-pointer">
               <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-gray-700 mb-2">
-                Haz clic para subir una partitura
-              </p>
-              <p className="text-sm text-gray-500">
-                Formatos: JPG, PNG (imagen clara de la partitura)
-              </p>
+              <p className="text-lg font-semibold text-gray-700 mb-2">Sube tu partitura</p>
+              <p className="text-sm text-gray-500">JPG, PNG - Imagen clara</p>
             </label>
           </div>
 
           {image && (
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
               <h3 className="font-semibold text-gray-700 mb-3">Partitura cargada:</h3>
               <img src={image} alt="Partitura" className="max-h-96 mx-auto rounded-lg shadow-md" />
             </div>
           )}
 
-          <button
-            onClick={analyzeSheet}
-            disabled={!image || analyzing}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg disabled:cursor-not-allowed"
-          >
+          <button onClick={analyzeSheet} disabled={!image || analyzing}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 shadow-lg disabled:cursor-not-allowed">
             {analyzing ? (
-              <>
-                <Loader2 className="w-6 h-6 animate-spin" />
-                Analizando partitura con IA...
-              </>
+              <><Loader2 className="w-6 h-6 animate-spin" />Analizando con IA...</>
             ) : (
-              <>
-                <Search className="w-6 h-6" />
-                Analizar Partitura
-              </>
+              <><Search className="w-6 h-6" />Analizar Partitura</>
             )}
           </button>
 
@@ -339,89 +238,92 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
           )}
         </div>
 
-        {sequence.length > 0 && (
+        {analysis && (
           <div className="mt-8 space-y-6">
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">📊 Secuencia extraída:</h2>
-              {renderSequence()}
-              <div className="mt-4 p-4 bg-white rounded-lg">
-                <p className="font-mono text-lg text-gray-700">
-                  <span className="font-semibold">Notación:</span> {sequence.join(', ')}
-                </p>
-                <p className="text-sm text-gray-600 mt-2">
-                  Total de notas: {sequence.length} | 
-                  Alteraciones: {sequence.filter(n => n.includes('#') || n.includes('b')).length}
-                </p>
+            {/* Info Básica */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-indigo-200">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Music className="w-6 h-6" />Información Básica
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <InfoCard label="Tonalidad" value={analysis.informacion_basica?.tonalidad} />
+                <InfoCard label="Compás" value={analysis.informacion_basica?.compas} />
+                <InfoCard label="Tempo" value={analysis.informacion_basica?.tempo} />
               </div>
-              
-              <div className="mt-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                <p className="text-sm font-semibold text-indigo-800 mb-2">📖 Leyenda:</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono">1-7</span>: Notas naturales
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono">#</span>: Sostenido (♯)
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="font-mono">b</span>: Bemol (♭)
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-3 h-3 bg-indigo-200 rounded border-2 border-indigo-400"></span>: Con alteración
-                  </div>
+            </div>
+
+            {/* Patrones */}
+            {analysis.patrones_melodicos?.length > 0 && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-300">
+                <h2 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-3">
+                  <Repeat className="w-8 h-8 text-purple-600" />
+                  Patrones Melódicos: {analysis.patrones_melodicos.length}
+                </h2>
+                <p className="text-gray-700 mb-5 text-sm">
+                  Fragmentos que se repiten. <strong>Memorizarlos acelera el aprendizaje.</strong>
+                </p>
+                <div className="space-y-5">
+                  {analysis.patrones_melodicos.map((patron, idx) => (
+                    <PatternCard key={idx} patron={patron} index={idx} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dificultad */}
+            <div className="bg-white rounded-xl p-6 border-2 border-gray-200 shadow-md">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-6 h-6 text-orange-600" />Nivel de Dificultad
+              </h2>
+              <div className={`inline-block px-6 py-3 rounded-full border-2 text-lg font-bold mb-4 ${getDifficultyColor(analysis.nivel_dificultad?.general)}`}>
+                {analysis.nivel_dificultad?.general?.toUpperCase()}
+              </div>
+              <ul className="space-y-2 mt-3">
+                {analysis.nivel_dificultad?.razones?.map((razon, idx) => (
+                  <li key={idx} className="flex items-start gap-2 bg-gray-50 p-3 rounded-lg">
+                    <span className="text-indigo-600">•</span>
+                    <span className="text-gray-700">{razon}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Técnicas */}
+            <div className="bg-white rounded-xl p-6 border-2 border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Características Técnicas</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400">
+                  <p className="font-semibold text-blue-900 mb-2">🎼 Armadura:</p>
+                  <p className="text-blue-800 font-bold">{analysis.caracteristicas_tecnicas?.alteraciones_armadura?.join(', ')}</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-400">
+                  <p className="font-semibold text-purple-900 mb-2">✏️ Accidentales:</p>
+                  <p className="text-purple-800 font-bold">{analysis.caracteristicas_tecnicas?.alteraciones_accidentales?.join(', ')}</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400">
+                  <p className="font-semibold text-green-900 mb-2">🎵 Figuras:</p>
+                  <p className="text-green-800">{analysis.caracteristicas_tecnicas?.figuras_predominantes?.join(', ')}</p>
+                </div>
+                <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-400">
+                  <p className="font-semibold text-orange-900 mb-2">🎯 Técnicas:</p>
+                  <p className="text-orange-800">{analysis.caracteristicas_tecnicas?.tecnicas_requeridas?.join(', ')}</p>
                 </div>
               </div>
             </div>
 
-            {patterns.length > 0 && (
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                  ✨ Motivos musicales principales: {patterns.length}
+            {/* Fragmentos Críticos */}
+            {analysis.fragmentos_criticos?.length > 0 && (
+              <div className="bg-yellow-50 rounded-xl p-6 border-2 border-yellow-300">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <Target className="w-6 h-6" />Fragmentos Críticos
                 </h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Estos son los fragmentos melódicos que se repiten en la pieza. Útil para:
-                  <span className="font-semibold"> memorización, análisis de estructura, práctica por secciones</span>
-                </p>
                 <div className="space-y-4">
-                  {patterns.map((pattern, idx) => (
-                    <div key={idx} className={`p-5 rounded-xl border-2 ${getColorForPattern(idx)} shadow-md hover:shadow-lg transition-shadow`}>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="font-bold text-xl text-gray-800">
-                              Motivo #{idx + 1}
-                            </span>
-                            <span className="text-xs bg-white px-2 py-1 rounded-full font-semibold text-gray-600">
-                              {pattern.length} notas
-                            </span>
-                          </div>
-                          <div className="mt-2 flex gap-2 flex-wrap">
-                            {pattern.pattern.map((n, i) => (
-                              <span key={i} className="px-3 py-2 bg-white rounded-lg font-semibold shadow-sm flex flex-col items-center min-w-[60px]">
-                                {renderNote(n)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-right bg-white px-4 py-2 rounded-lg shadow-sm ml-4">
-                          <div className="text-2xl font-bold text-indigo-600">
-                            {pattern.count}x
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            veces
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
-                        <div className="text-sm text-gray-700 bg-white px-3 py-2 rounded-lg">
-                          <span className="font-semibold">🎯 Aparece en:</span> compases {pattern.occurrences.map(o => Math.floor(o / 8) + 1).join(', ')}
-                        </div>
-                        <div className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg">
-                          <span className="font-semibold">🎼 Secuencia:</span> {pattern.pattern.join(' → ')}
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs text-gray-500 bg-white px-3 py-2 rounded-lg italic">
-                        💡 Practica este motivo por separado para mejorar la fluidez
+                  {analysis.fragmentos_criticos.map((f, idx) => (
+                    <div key={idx} className="bg-white p-5 rounded-lg border-l-4 border-yellow-500">
+                      <span className="bg-yellow-200 px-3 py-1 rounded-full font-bold text-sm">Compases {f.compases}</span>
+                      <p className="text-gray-800 mt-3"><strong className="text-red-700">⚠️ Problema:</strong> {f.descripcion}</p>
+                      <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mt-3">
+                        <p className="text-green-800"><strong>💡 Solución:</strong> {f.como_practicar}</p>
                       </div>
                     </div>
                   ))}
@@ -429,23 +331,38 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
               </div>
             )}
 
-            {patterns.length === 0 && (
-              <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-6">
-                <p className="text-blue-800 font-medium">
-                  ℹ️ No se encontraron motivos melódicos repetidos significativos (mínimo 3 notas).
-                </p>
-                <p className="text-sm text-blue-600 mt-2">
-                  Esto puede indicar una pieza con mucha variación melódica o improvisación.
-                </p>
+            {/* Consejos */}
+            <div className="bg-green-50 rounded-xl p-6 border-2 border-green-300">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Brain className="w-6 h-6" />Consejos de Práctica
+              </h2>
+              <div className="space-y-3">
+                {analysis.consejos_practica?.map((c, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-lg border-l-4 border-green-400">
+                    <p className="text-gray-800"><span className="font-bold text-green-600">#{idx + 1}</span> {c}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Contexto */}
+            {analysis.contexto_musical && (
+              <div className="bg-purple-50 rounded-xl p-6 border-2 border-purple-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Contexto Musical</h2>
+                <div className="grid md:grid-cols-3 gap-4">
+                  <InfoCard label="Compositor" value={analysis.contexto_musical.compositor} color="purple" />
+                  <InfoCard label="Período" value={analysis.contexto_musical.periodo} color="purple" />
+                  <InfoCard label="Estilo" value={analysis.contexto_musical.estilo} color="purple" />
+                </div>
               </div>
             )}
           </div>
         )}
       </div>
 
-      <div className="mt-6 text-center text-sm text-gray-600">
-        <p>💡 Tip: Las partituras con mejor calidad producen mejores resultados</p>
-        <p className="mt-1">♯ Sostenidos y ♭ Bemoles son detectados automáticamente</p>
+      <div className="mt-6 text-center text-sm text-gray-600 bg-white rounded-lg p-4 shadow">
+        <p className="font-semibold mb-2">🎵 Sistema RAG optimizado</p>
+        <p>Componentes reutilizables • Código limpio • Análisis eficiente</p>
       </div>
     </div>
   );
