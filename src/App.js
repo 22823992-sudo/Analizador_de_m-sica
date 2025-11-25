@@ -140,15 +140,16 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
   };
 
   const findPatterns = (seq) => {
-    if (seq.length < 4) {
+    if (seq.length < 3) {
       setPatterns([]);
       return;
     }
 
-    const foundPatterns = [];
-    const maxPatternLength = Math.min(Math.floor(seq.length / 2), 8);
+    const allPatterns = [];
+    const maxPatternLength = Math.min(Math.floor(seq.length / 2), 12);
 
-    for (let len = 2; len <= maxPatternLength; len++) {
+    // Encontrar todos los patrones
+    for (let len = 3; len <= maxPatternLength; len++) {
       for (let start = 0; start <= seq.length - len; start++) {
         const pattern = seq.slice(start, start + len);
         const occurrences = [];
@@ -162,9 +163,9 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
 
         if (occurrences.length >= 2) {
           const patternKey = pattern.join('-');
-          const exists = foundPatterns.some(p => p.pattern.join('-') === patternKey);
+          const exists = allPatterns.some(p => p.pattern.join('-') === patternKey);
           if (!exists) {
-            foundPatterns.push({ 
+            allPatterns.push({ 
               pattern, 
               occurrences, 
               count: occurrences.length, 
@@ -175,9 +176,31 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
       }
     }
 
-    setPatterns(foundPatterns.sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return b.length - a.length;
+    // Filtrar patrones: eliminar los que están completamente contenidos en otros más largos
+    const filteredPatterns = allPatterns.filter(patternA => {
+      return !allPatterns.some(patternB => {
+        if (patternB.length <= patternA.length) return false;
+        
+        // Verificar si patternA está contenido en patternB
+        const patternAStr = patternA.pattern.join('-');
+        const patternBStr = patternB.pattern.join('-');
+        
+        if (patternBStr.includes(patternAStr)) {
+          // Verificar si las ocurrencias de A están cubiertas por B
+          return patternA.occurrences.every(occA => {
+            return patternB.occurrences.some(occB => {
+              return occA >= occB && occA + patternA.length <= occB + patternB.length;
+            });
+          });
+        }
+        return false;
+      });
+    });
+
+    // Ordenar: primero por longitud (más largo = más importante), luego por repeticiones
+    setPatterns(filteredPatterns.sort((a, b) => {
+      if (b.length !== a.length) return b.length - a.length;
+      return b.count - a.count;
     }));
   };
 
@@ -267,7 +290,7 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
           <div className="border-4 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors">
             <input
               type="file"
-              accept="image/*,.pdf"
+              accept="image/*"
               onChange={handleImageUpload}
               className="hidden"
               id="file-upload"
@@ -278,7 +301,7 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
                 Haz clic para subir una partitura
               </p>
               <p className="text-sm text-gray-500">
-                Formatos: JPG, PNG, PDF (imagen escaneada)
+                Formatos: JPG, PNG (imagen clara de la partitura)
               </p>
             </label>
           </div>
@@ -352,17 +375,26 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
 
             {patterns.length > 0 && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                  ✨ Patrones encontrados: {patterns.length}
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                  ✨ Motivos musicales principales: {patterns.length}
                 </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Estos son los fragmentos melódicos que se repiten en la pieza. Útil para:
+                  <span className="font-semibold"> memorización, análisis de estructura, práctica por secciones</span>
+                </p>
                 <div className="space-y-4">
                   {patterns.map((pattern, idx) => (
                     <div key={idx} className={`p-5 rounded-xl border-2 ${getColorForPattern(idx)} shadow-md hover:shadow-lg transition-shadow`}>
                       <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <span className="font-bold text-xl text-gray-800">
-                            Patrón #{idx + 1}:
-                          </span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-bold text-xl text-gray-800">
+                              Motivo #{idx + 1}
+                            </span>
+                            <span className="text-xs bg-white px-2 py-1 rounded-full font-semibold text-gray-600">
+                              {pattern.length} notas
+                            </span>
+                          </div>
                           <div className="mt-2 flex gap-2 flex-wrap">
                             {pattern.pattern.map((n, i) => (
                               <span key={i} className="px-3 py-2 bg-white rounded-lg font-semibold shadow-sm flex flex-col items-center min-w-[60px]">
@@ -371,20 +403,25 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
                             ))}
                           </div>
                         </div>
-                        <div className="text-right bg-white px-4 py-2 rounded-lg shadow-sm">
-                          <div className="text-lg font-bold text-indigo-600">
+                        <div className="text-right bg-white px-4 py-2 rounded-lg shadow-sm ml-4">
+                          <div className="text-2xl font-bold text-indigo-600">
                             {pattern.count}x
                           </div>
                           <div className="text-xs text-gray-600">
-                            repeticiones
+                            veces
                           </div>
                         </div>
                       </div>
-                      <div className="text-sm text-gray-700 bg-white px-3 py-2 rounded-lg">
-                        <span className="font-semibold">Posiciones:</span> {pattern.occurrences.map(o => o + 1).join(', ')}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                        <div className="text-sm text-gray-700 bg-white px-3 py-2 rounded-lg">
+                          <span className="font-semibold">🎯 Aparece en:</span> compases {pattern.occurrences.map(o => Math.floor(o / 8) + 1).join(', ')}
+                        </div>
+                        <div className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg">
+                          <span className="font-semibold">🎼 Secuencia:</span> {pattern.pattern.join(' → ')}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-600 bg-white px-3 py-2 rounded-lg mt-2">
-                        <span className="font-semibold">Secuencia:</span> {pattern.pattern.join(' → ')}
+                      <div className="mt-2 text-xs text-gray-500 bg-white px-3 py-2 rounded-lg italic">
+                        💡 Practica este motivo por separado para mejorar la fluidez
                       </div>
                     </div>
                   ))}
@@ -393,9 +430,12 @@ Sé muy preciso con las alteraciones. Revisa cuidadosamente cada nota.`
             )}
 
             {patterns.length === 0 && (
-              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6">
-                <p className="text-yellow-800 font-medium">
-                  ℹ️ No se encontraron patrones repetitivos en esta secuencia.
+              <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-6">
+                <p className="text-blue-800 font-medium">
+                  ℹ️ No se encontraron motivos melódicos repetidos significativos (mínimo 3 notas).
+                </p>
+                <p className="text-sm text-blue-600 mt-2">
+                  Esto puede indicar una pieza con mucha variación melódica o improvisación.
                 </p>
               </div>
             )}
