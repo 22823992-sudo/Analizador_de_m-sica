@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Análisis Musical RAG</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    }
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
   </style>
 </head>
 <body>
@@ -20,172 +20,72 @@
 
   <script type="text/babel">
     const { useState } = React;
-
-    // Iconos SVG simplificados
-    const Music = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9 18V5l12-2v13M9 18c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zm12-2c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"/>
-      </svg>
-    );
-
-    const Upload = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-      </svg>
-    );
-
-    const Loader2 = () => (
-      <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
-    );
-
-    const Search = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-    );
-
-    const AlertCircle = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-    );
-
-    const Repeat = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-      </svg>
-    );
-
-    const TrendingUp = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-      </svg>
-    );
-
-    const Target = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-      </svg>
-    );
-
-    const Activity = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>
-    );
-
-    const Calendar = () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-      </svg>
-    );
+    
+    // Configurar PDF.js
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
 
     const SheetMusicAnalyzer = () => {
-      const [image, setImage] = useState(null);
+      const [preview, setPreview] = useState(null);
       const [analyzing, setAnalyzing] = useState(false);
       const [analysis, setAnalysis] = useState(null);
       const [error, setError] = useState('');
+      const [fileName, setFileName] = useState('');
+      const [apiKey, setApiKey] = useState('');
+      const [showApiInput, setShowApiInput] = useState(true);
 
-      const promptRAG = `Analiza esta partitura identificando TODOS los patrones melódicos y rítmicos.
-
-Responde SOLO con JSON válido (sin markdown):
-
+      const prompt = `Analiza esta partitura identificando TODOS los patrones melódicos y rítmicos. Responde SOLO con JSON válido (sin markdown):
 {
-  "informacion_basica": {
-    "tonalidad": "string",
-    "compas": "string",
-    "tempo": "string",
-    "clave": "string",
-    "total_compases": number,
-    "estructura": "string"
-  },
-  "patrones_melodicos": [
-    {
-      "nombre": "string",
-      "notas_aproximadas": "string",
-      "compases": "string",
-      "repeticiones": number,
-      "tipo": "escala/arpegio/secuencia/motivo/cromatismo/salto/ornamento",
-      "intervalos": "string",
-      "direccion": "ascendente/descendente/ondulante",
-      "importancia": "string",
-      "dificultad_patron": "fácil/medio/difícil",
-      "como_practicar": "string",
-      "velocidad_sugerida": "string"
-    }
-  ],
-  "patrones_ritmicos": [
-    {
-      "nombre": "string",
-      "figura_ritmica": "string",
-      "compases": "string",
-      "repeticiones": number,
-      "dificultad": "fácil/medio/difícil"
-    }
-  ],
-  "analisis_intervalico": {
-    "intervalos_mas_usados": ["string"],
-    "saltos_grandes": ["string"],
-    "cromatismos": ["string"],
-    "patron_intervalico_dominante": "string"
-  },
-  "nivel_dificultad": {
-    "general": "principiante/intermedio/avanzado/experto",
-    "tecnica": number,
-    "lectura": number,
-    "musicalidad": number,
-    "razones": ["string"]
-  },
-  "caracteristicas_tecnicas": {
-    "alteraciones_armadura": ["string"],
-    "figuras_predominantes": ["string"],
-    "tecnicas_requeridas": ["string"],
-    "articulaciones": ["string"],
-    "dinamicas": ["string"]
-  },
-  "fragmentos_criticos": [
-    {
-      "compases": "string",
-      "descripcion": "string",
-      "tipo_dificultad": "string",
-      "como_practicar": "string",
-      "ejercicios_preparatorios": "string"
-    }
-  ],
-  "plan_de_estudio": {
-    "semana_1": ["string"],
-    "semana_2": ["string"],
-    "semana_3": ["string"],
-    "semana_4": ["string"]
-  },
-  "ejercicios_tecnicos": ["string"],
-  "consejos_practica": ["string"],
-  "contexto_musical": {
-    "compositor": "string",
-    "periodo": "string",
-    "estilo": "string",
-    "obras_similares": ["string"]
-  }
+  "informacion_basica": {"tonalidad": "str", "compas": "str", "tempo": "str", "clave": "str", "total_compases": 0},
+  "patrones_melodicos": [{"nombre": "str", "notas_aproximadas": "str", "compases": "str", "repeticiones": 0, "tipo": "str", "intervalos": "str", "direccion": "str", "importancia": "str", "dificultad_patron": "str", "como_practicar": "str", "velocidad_sugerida": "str"}],
+  "patrones_ritmicos": [{"nombre": "str", "figura_ritmica": "str", "compases": "str", "repeticiones": 0, "dificultad": "str"}],
+  "nivel_dificultad": {"general": "str", "tecnica": 0, "lectura": 0, "musicalidad": 0},
+  "fragmentos_criticos": [{"compases": "str", "descripcion": "str", "como_practicar": "str"}],
+  "plan_de_estudio": {"semana_1": ["str"], "semana_2": ["str"], "semana_3": ["str"], "semana_4": ["str"]},
+  "consejos_practica": ["str"]
 }`;
 
-      const handleImageUpload = (e) => {
+      const handleFileUpload = async (e) => {
         const file = e.target.files[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            setImage(event.target.result);
-            setError('');
-            setAnalysis(null);
-          };
-          reader.readAsDataURL(file);
+        if (!file) return;
+
+        setFileName(file.name);
+        setError('');
+        setAnalysis(null);
+
+        try {
+          if (file.type === 'application/pdf') {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({scale: 2});
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const context = canvas.getContext('2d');
+            await page.render({canvasContext: context, viewport}).promise;
+            setPreview(canvas.toDataURL('image/png'));
+          } else {
+            const reader = new FileReader();
+            reader.onload = (event) => setPreview(event.target.result);
+            reader.readAsDataURL(file);
+          }
+        } catch (err) {
+          setError('Error al procesar el archivo. Intenta con otro.');
+          console.error(err);
         }
       };
 
       const analyzeSheet = async () => {
-        if (!image) {
-          setError('Por favor sube una imagen de la partitura');
+        if (!apiKey) {
+          setError('Por favor ingresa tu API Key de Anthropic');
+          setShowApiInput(true);
+          return;
+        }
+
+        if (!preview) {
+          setError('Por favor sube una imagen o PDF');
           return;
         }
 
@@ -193,232 +93,228 @@ Responde SOLO con JSON válido (sin markdown):
         setError('');
 
         try {
-          const base64Image = image.split(',')[1];
-          const mediaType = image.split(';')[0].split(':')[1];
+          const base64Image = preview.split(',')[1];
+          const mediaType = preview.split(';')[0].split(':')[1];
 
           const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
             body: JSON.stringify({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 8000,
               messages: [{
                 role: 'user',
                 content: [
-                  {
-                    type: 'image',
-                    source: { type: 'base64', media_type: mediaType, data: base64Image }
-                  },
-                  { type: 'text', text: promptRAG }
+                  { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
+                  { type: 'text', text: prompt }
                 ]
               }]
             })
           });
 
-          if (!response.ok) throw new Error(`API Error: ${response.status}`);
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `API Error: ${response.status}`);
+          }
 
           const data = await response.json();
           const text = data.content.filter(i => i.type === 'text').map(i => i.text).join('\n').trim();
           const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
           setAnalysis(JSON.parse(cleanText));
-          
         } catch (err) {
-          console.error('Error:', err);
-          setError('Error al analizar. Verifica que la imagen sea clara.');
+          setError(`Error: ${err.message}`);
+          console.error(err);
         } finally {
           setAnalyzing(false);
         }
       };
 
-      const InfoCard = ({ label, value }) => (
-        <div className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-indigo-400">
-          <div className="text-xs text-gray-600 mb-1">{label}</div>
-          <div className="text-base font-bold text-indigo-600">{value || 'N/A'}</div>
-        </div>
-      );
-
-      const PatternCard = ({ patron, index }) => {
-        const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'cyan', 'red', 'indigo'];
-        const color = colors[index % colors.length];
-        const icons = {
-          'escala': '📊', 'arpegio': '🎼', 'secuencia': '🔄',
-          'motivo': '🎵', 'cromatismo': '🌈', 'salto': '⬆️', 'ornamento': '✨'
-        };
+      const PatternCard = ({ patron, idx }) => {
+        const colors = ['blue', 'green', 'purple', 'orange', 'pink', 'cyan'];
+        const c = colors[idx % colors.length];
+        const icons = {'escala': '📊', 'arpegio': '🎼', 'secuencia': '🔄', 'motivo': '🎵', 'cromatismo': '🌈', 'salto': '⬆️', 'ornamento': '✨'};
         
         return (
-          <div className={`p-4 rounded-lg border-2 border-${color}-500 bg-${color}-50 shadow-md`}>
-            <div className="flex items-start justify-between mb-3">
+          <div className={`p-3 rounded-lg border-2 border-${c}-500 bg-${c}-50`}>
+            <div className="flex justify-between mb-2">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">{icons[patron.tipo?.toLowerCase()] || '🎵'}</span>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-800">{patron.nombre}</h3>
-                    <div className="flex gap-2 mt-1">
-                      <span className="bg-white px-2 py-0.5 rounded-full text-xs font-semibold text-gray-600">
-                        {patron.tipo}
-                      </span>
-                      <span className="bg-white px-2 py-0.5 rounded-full text-xs font-semibold text-gray-600">
-                        {patron.direccion}
-                      </span>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">{icons[patron.tipo?.toLowerCase()] || '🎵'}</span>
+                  <h3 className="font-bold text-gray-800">{patron.nombre}</h3>
                 </div>
-                <div className="bg-white p-3 rounded-lg mb-2 shadow-sm">
-                  <p className="text-xs text-gray-600">Patrón:</p>
-                  <p className="text-sm font-mono font-bold text-indigo-700">{patron.notas_aproximadas}</p>
-                  {patron.intervalos && (
-                    <p className="text-xs text-gray-600 mt-1">Intervalos: <span className="font-semibold text-purple-600">{patron.intervalos}</span></p>
-                  )}
+                <div className="flex gap-1">
+                  <span className="bg-white px-2 py-0.5 rounded text-xs">{patron.tipo}</span>
+                  <span className="bg-white px-2 py-0.5 rounded text-xs">{patron.direccion}</span>
                 </div>
               </div>
-              <div className="ml-3 text-center bg-white px-3 py-2 rounded-lg shadow-md">
-                <div className="text-2xl font-bold text-purple-600">{patron.repeticiones}x</div>
+              <div className="bg-white px-3 py-1 rounded text-center">
+                <div className="text-lg font-bold text-purple-600">{patron.repeticiones}x</div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <div className="bg-white p-2 rounded-lg shadow-sm">
-                <p className="text-xs font-semibold text-gray-700">📍 {patron.compases}</p>
-              </div>
-              <div className="bg-white p-2 rounded-lg shadow-sm">
-                <p className="text-xs font-semibold text-orange-700 capitalize">{patron.dificultad_patron}</p>
-              </div>
-              <div className="bg-white p-2 rounded-lg shadow-sm">
-                <p className="text-xs font-semibold text-green-700">{patron.velocidad_sugerida}</p>
-              </div>
+            <div className="bg-white p-2 rounded mb-2">
+              <p className="text-xs text-gray-600">Patrón:</p>
+              <p className="text-sm font-mono font-bold text-indigo-700">{patron.notas_aproximadas}</p>
             </div>
-            <div className="bg-blue-100 border-l-4 border-blue-500 p-2 rounded-lg mb-2">
-              <p className="text-xs font-semibold text-blue-900">⭐ {patron.importancia}</p>
+            <div className="grid grid-cols-3 gap-1 mb-2 text-xs">
+              <div className="bg-white p-1 rounded">📍 {patron.compases}</div>
+              <div className="bg-white p-1 rounded capitalize">{patron.dificultad_patron}</div>
+              <div className="bg-white p-1 rounded">{patron.velocidad_sugerida}</div>
             </div>
-            <div className="bg-green-100 border-l-4 border-green-500 p-2 rounded-lg">
-              <p className="text-xs font-semibold text-green-900">💡 {patron.como_practicar}</p>
-            </div>
+            <div className="bg-green-100 p-2 rounded text-xs">💡 {patron.como_practicar}</div>
           </div>
         );
       };
 
-      const getDifficultyColor = (level) => {
-        const colors = {
-          'principiante': 'bg-green-100 text-green-800 border-green-300',
-          'intermedio': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-          'avanzado': 'bg-orange-100 text-orange-800 border-orange-300',
-          'experto': 'bg-red-100 text-red-800 border-red-300'
-        };
-        return colors[level?.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-300';
+      const diffColors = {
+        'principiante': 'bg-green-100 text-green-800',
+        'intermedio': 'bg-yellow-100 text-yellow-800',
+        'avanzado': 'bg-orange-100 text-orange-800',
+        'experto': 'bg-red-100 text-red-800'
       };
 
       return (
         <div className="max-w-6xl mx-auto p-4 bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen">
           <div className="bg-white rounded-2xl shadow-xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Music />
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800">Análisis Musical RAG</h1>
-                <p className="text-gray-600 text-sm">Sistema optimizado con IA</p>
-              </div>
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">🎼 Análisis Musical RAG</h1>
+              <p className="text-gray-600">Sistema optimizado con IA para partituras</p>
             </div>
 
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-l-4 border-indigo-500 p-4 mb-4 rounded-lg">
-              <h3 className="font-bold text-indigo-900 mb-2">🎯 Análisis Completo</h3>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs text-indigo-800">
-                <div className="bg-white p-2 rounded">🎼 Patrones melódicos</div>
-                <div className="bg-white p-2 rounded">🥁 Patrones rítmicos</div>
-                <div className="bg-white p-2 rounded">📊 Análisis intervalos</div>
-                <div className="bg-white p-2 rounded">📅 Plan de estudio</div>
+            {/* API Key Input */}
+            {showApiInput && (
+              <div className="mb-6 bg-blue-50 border-2 border-blue-300 rounded-xl p-4">
+                <h3 className="font-bold text-blue-900 mb-3">🔑 Configuración API</h3>
+                <p className="text-sm text-blue-800 mb-3">
+                  Necesitas una API Key de Anthropic. 
+                  <a href="https://console.anthropic.com/" target="_blank" className="underline ml-1">
+                    Obtén una aquí
+                  </a>
+                </p>
+                <div className="flex gap-2">
+                  <input 
+                    type="password" 
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-ant-api03-..."
+                    className="flex-1 px-4 py-2 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                  <button 
+                    onClick={() => {
+                      if (apiKey) setShowApiInput(false);
+                    }}
+                    className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700"
+                  >
+                    Guardar
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+
+            {!showApiInput && (
+              <div className="mb-4 flex justify-between items-center bg-green-50 border-2 border-green-300 rounded-lg p-3">
+                <span className="text-green-800 font-semibold">✓ API Key configurada</span>
+                <button 
+                  onClick={() => setShowApiInput(true)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Cambiar
+                </button>
+              </div>
+            )}
 
             <div className="space-y-4">
-              <div className="border-4 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-indigo-400 transition-colors">
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="file-upload" />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload />
-                  <p className="text-base font-semibold text-gray-700 mb-1">Sube tu partitura</p>
-                  <p className="text-xs text-gray-500">JPG, PNG - Imagen clara</p>
+              <div className="border-4 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition">
+                <input 
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                  id="file" 
+                />
+                <label htmlFor="file" className="cursor-pointer block">
+                  <div className="text-6xl mb-3">📄</div>
+                  <p className="font-semibold text-lg text-gray-700">Sube tu partitura</p>
+                  <p className="text-sm text-gray-500 mt-1">Formatos: JPG, PNG, PDF</p>
+                  {fileName && <p className="text-xs text-indigo-600 mt-2">📎 {fileName}</p>}
                 </label>
               </div>
 
-              {image && (
+              {preview && (
                 <div className="bg-gray-50 rounded-xl p-3 border-2 border-gray-200">
-                  <h3 className="font-semibold text-gray-700 mb-2 text-sm">Partitura cargada:</h3>
-                  <img src={image} alt="Partitura" className="max-h-80 mx-auto rounded-lg shadow-md" />
+                  <h3 className="font-semibold text-gray-700 mb-2">Vista previa:</h3>
+                  <img src={preview} alt="Preview" className="max-h-96 mx-auto rounded-lg shadow-md" />
                 </div>
               )}
 
-              <button onClick={analyzeSheet} disabled={!image || analyzing}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg disabled:cursor-not-allowed">
+              <button 
+                onClick={analyzeSheet} 
+                disabled={!preview || analyzing || !apiKey}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-xl transition-all disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+              >
                 {analyzing ? (
-                  <><Loader2 /><span>Analizando...</span></>
+                  <>
+                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Analizando...
+                  </>
                 ) : (
-                  <><Search /><span>Analizar Partitura</span></>
+                  <>🔍 Analizar Partitura</>
                 )}
               </button>
 
               {error && (
-                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3 flex items-start gap-2">
-                  <AlertCircle />
-                  <p className="text-red-800 font-medium text-sm">{error}</p>
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 text-red-800 font-medium">
+                  ⚠️ {error}
                 </div>
               )}
             </div>
 
             {analysis && (
-              <div className="mt-6 space-y-4">
-                {/* Información Básica */}
+              <div className="mt-8 space-y-6">
+                {/* Info Básica */}
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-indigo-200">
-                  <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                    <Music />Información Básica
-                  </h2>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">📋 Información Básica</h2>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <InfoCard label="Tonalidad" value={analysis.informacion_basica?.tonalidad} />
-                    <InfoCard label="Compás" value={analysis.informacion_basica?.compas} />
-                    <InfoCard label="Tempo" value={analysis.informacion_basica?.tempo} />
-                    <InfoCard label="Clave" value={analysis.informacion_basica?.clave} />
-                    <InfoCard label="Compases" value={analysis.informacion_basica?.total_compases} />
+                    {['tonalidad', 'compas', 'tempo', 'clave', 'total_compases'].map(k => (
+                      <div key={k} className="bg-white p-3 rounded-lg shadow-sm">
+                        <div className="text-xs text-gray-600 capitalize">{k.replace('_', ' ')}</div>
+                        <div className="font-bold text-indigo-600 text-lg">{analysis.informacion_basica?.[k] || 'N/A'}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
                 {/* Patrones Melódicos */}
                 {analysis.patrones_melodicos?.length > 0 && (
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-300">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <Repeat />
-                      Patrones Melódicos: {analysis.patrones_melodicos.length}
-                    </h2>
+                  <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">🎵 Patrones Melódicos ({analysis.patrones_melodicos.length})</h2>
                     <div className="space-y-3">
-                      {analysis.patrones_melodicos.map((patron, idx) => (
-                        <PatternCard key={idx} patron={patron} index={idx} />
-                      ))}
+                      {analysis.patrones_melodicos.map((p, i) => <PatternCard key={i} patron={p} idx={i} />)}
                     </div>
                   </div>
                 )}
 
                 {/* Patrones Rítmicos */}
                 {analysis.patrones_ritmicos?.length > 0 && (
-                  <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 border-2 border-emerald-300">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <Activity />
-                      Patrones Rítmicos: {analysis.patrones_ritmicos.length}
-                    </h2>
+                  <div className="bg-emerald-50 rounded-xl p-4 border-2 border-emerald-200">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">🥁 Patrones Rítmicos ({analysis.patrones_ritmicos.length})</h2>
                     <div className="grid md:grid-cols-2 gap-3">
-                      {analysis.patrones_ritmicos.map((patron, idx) => (
-                        <div key={idx} className="p-4 rounded-lg border-2 border-emerald-500 bg-emerald-50 shadow-md">
+                      {analysis.patrones_ritmicos.map((p, i) => (
+                        <div key={i} className="p-3 rounded-lg border-2 border-emerald-500 bg-white shadow-sm">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-2xl">🥁</span>
-                            <h3 className="text-lg font-bold text-gray-800">{patron.nombre}</h3>
+                            <span className="text-xl">🥁</span>
+                            <h3 className="font-bold text-gray-800">{p.nombre}</h3>
                           </div>
-                          <div className="bg-white p-3 rounded-lg mb-2 shadow-sm">
+                          <div className="bg-emerald-50 p-2 rounded mb-2">
                             <p className="text-xs text-gray-600">Figura:</p>
-                            <p className="text-sm font-mono font-bold text-emerald-700">{patron.figura_ritmica}</p>
+                            <p className="text-sm font-mono font-bold text-emerald-700">{p.figura_ritmica}</p>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-white p-2 rounded-lg shadow-sm">
-                              <p className="text-xs text-gray-600">Compases:</p>
-                              <p className="text-xs font-bold text-emerald-700">{patron.compases}</p>
-                            </div>
-                            <div className="bg-white p-2 rounded-lg shadow-sm">
-                              <p className="text-xs text-gray-600">Rep:</p>
-                              <p className="text-xs font-bold text-purple-600">{patron.repeticiones}x</p>
-                            </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-gray-50 p-2 rounded">📍 {p.compases}</div>
+                            <div className="bg-gray-50 p-2 rounded font-bold">{p.repeticiones}x</div>
                           </div>
                         </div>
                       ))}
@@ -429,26 +325,17 @@ Responde SOLO con JSON válido (sin markdown):
                 {/* Nivel de Dificultad */}
                 {analysis.nivel_dificultad && (
                   <div className="bg-white rounded-xl p-4 border-2 border-gray-200 shadow-md">
-                    <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <TrendingUp />Nivel de Dificultad
-                    </h2>
-                    <div className={`inline-block px-4 py-2 rounded-full border-2 text-base font-bold mb-3 ${getDifficultyColor(analysis.nivel_dificultad.general)}`}>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">📊 Nivel de Dificultad</h2>
+                    <div className={`inline-block px-6 py-3 rounded-full font-bold text-lg mb-4 ${diffColors[analysis.nivel_dificultad.general?.toLowerCase()] || 'bg-gray-100'}`}>
                       {analysis.nivel_dificultad.general?.toUpperCase()}
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
-                        <p className="text-xs text-gray-600 mb-1">Técnica</p>
-                        <p className="text-xl font-bold text-blue-600">{analysis.nivel_dificultad.tecnica}/10</p>
-                      </div>
-                      <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-400">
-                        <p className="text-xs text-gray-600 mb-1">Lectura</p>
-                        <p className="text-xl font-bold text-purple-600">{analysis.nivel_dificultad.lectura}/10</p>
-                      </div>
-                      <div className="bg-pink-50 p-3 rounded-lg border-l-4 border-pink-400">
-                        <p className="text-xs text-gray-600 mb-1">Musicalidad</p>
-                        <p className="text-xl font-bold text-pink-600">{analysis.nivel_dificultad.musicalidad}/10</p>
-                      </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      {['tecnica', 'lectura', 'musicalidad'].map((k, i) => (
+                        <div key={k} className={`p-4 rounded-lg ${['bg-blue-50', 'bg-purple-50', 'bg-pink-50'][i]}`}>
+                          <p className="text-sm text-gray-600 capitalize mb-1">{k}</p>
+                          <p className="text-3xl font-bold text-indigo-600">{analysis.nivel_dificultad[k]}/10</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -456,16 +343,14 @@ Responde SOLO con JSON válido (sin markdown):
                 {/* Fragmentos Críticos */}
                 {analysis.fragmentos_criticos?.length > 0 && (
                   <div className="bg-yellow-50 rounded-xl p-4 border-2 border-yellow-300">
-                    <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <Target />Fragmentos Críticos
-                    </h2>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">⚠️ Fragmentos Críticos</h2>
                     <div className="space-y-3">
-                      {analysis.fragmentos_criticos.map((f, idx) => (
-                        <div key={idx} className="bg-white p-4 rounded-lg border-l-4 border-yellow-500 shadow-sm">
-                          <span className="bg-yellow-200 px-2 py-1 rounded-full font-bold text-xs">Compases {f.compases}</span>
-                          <p className="text-gray-800 text-sm mt-2"><strong className="text-red-700">⚠️ Problema:</strong> {f.descripcion}</p>
-                          <div className="bg-green-50 border-l-4 border-green-500 p-2 rounded mt-2">
-                            <p className="text-green-800 text-sm"><strong>💡 Solución:</strong> {f.como_practicar}</p>
+                      {analysis.fragmentos_criticos.map((f, i) => (
+                        <div key={i} className="bg-white p-4 rounded-lg border-l-4 border-yellow-500 shadow-sm">
+                          <span className="bg-yellow-200 px-3 py-1 rounded-full text-xs font-bold">📍 Compases {f.compases}</span>
+                          <p className="text-sm mt-3"><strong className="text-red-700">⚠️ Problema:</strong> {f.descripcion}</p>
+                          <div className="bg-green-50 border-l-4 border-green-500 p-3 rounded mt-3">
+                            <p className="text-sm text-green-900"><strong>💡 Solución:</strong> {f.como_practicar}</p>
                           </div>
                         </div>
                       ))}
@@ -475,20 +360,18 @@ Responde SOLO con JSON válido (sin markdown):
 
                 {/* Plan de Estudio */}
                 {analysis.plan_de_estudio && (
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border-2 border-green-300">
-                    <h2 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <Calendar />Plan de Estudio
-                    </h2>
-                    <div className="grid md:grid-cols-2 gap-3">
-                      {['semana_1', 'semana_2', 'semana_3', 'semana_4'].map((semana, idx) => (
-                        analysis.plan_de_estudio[semana] && (
-                          <div key={idx} className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-                            <h3 className="font-bold text-green-900 mb-2 text-sm">📅 Semana {idx + 1}</h3>
-                            <ul className="space-y-1">
-                              {analysis.plan_de_estudio[semana].map((objetivo, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-gray-700">
-                                  <span className="text-green-600">✓</span>
-                                  <span>{objetivo}</span>
+                  <div className="bg-green-50 rounded-xl p-4 border-2 border-green-300">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">📅 Plan de Estudio (4 semanas)</h2>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {['semana_1', 'semana_2', 'semana_3', 'semana_4'].map((s, i) => (
+                        analysis.plan_de_estudio[s] && (
+                          <div key={i} className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+                            <h3 className="font-bold text-green-900 mb-3">📅 Semana {i + 1}</h3>
+                            <ul className="space-y-2">
+                              {analysis.plan_de_estudio[s].map((obj, j) => (
+                                <li key={j} className="flex items-start gap-2 text-sm">
+                                  <span className="text-green-600 font-bold">✓</span>
+                                  <span className="text-gray-700">{obj}</span>
                                 </li>
                               ))}
                             </ul>
@@ -502,11 +385,11 @@ Responde SOLO con JSON válido (sin markdown):
                 {/* Consejos */}
                 {analysis.consejos_practica?.length > 0 && (
                   <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-300">
-                    <h2 className="text-xl font-bold text-gray-800 mb-3">💡 Consejos de Práctica</h2>
-                    <ul className="space-y-2">
-                      {analysis.consejos_practica.map((consejo, idx) => (
-                        <li key={idx} className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-purple-400 text-gray-700 text-sm">
-                          {consejo}
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">💡 Consejos de Práctica</h2>
+                    <ul className="space-y-3">
+                      {analysis.consejos_practica.map((c, i) => (
+                        <li key={i} className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-purple-400">
+                          <span className="text-gray-700">{c}</span>
                         </li>
                       ))}
                     </ul>
@@ -519,7 +402,8 @@ Responde SOLO con JSON válido (sin markdown):
       );
     };
 
-    ReactDOM.render(<SheetMusicAnalyzer />, document.getElementById('root'));
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<SheetMusicAnalyzer />);
   </script>
 </body>
 </html>
